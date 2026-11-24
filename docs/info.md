@@ -28,7 +28,30 @@ Inside each neuron, `(x AND nz) XOR neg` plus `neg` adds `x`, subtracts `x`, or 
 
 Output: `uo` shows a byte of one neuron's sum: neuron `uio[2:1]`, low byte if `uio[0]` = 0, high byte if 1.
 
+## Benchmark mode (`uio[3]`, `uio[4]`): measuring energy
+
+To measure how much energy one ternary MAC costs on the real chip, the input pins must stay quiet,
+otherwise the meter also measures the pins and the microcontroller feeding them.
+
+| `uio[4]` DRY | `uio[3]` RUN | What happens every clock |
+|---|---|---|
+| any | 0 | normal commands |
+| 0 | 1 | an on-chip 16-bit random generator (LFSR, x^16+x^14+x^13+x^11+1, seed `0xACE1`) supplies `x` (low byte) and the four weights (high byte), and all four neurons MAC. Commands are ignored. |
+| 1 | 1 | the generator runs, the sums stay frozen |
+
+CLEAR (with RUN low) zeroes the sums and restarts the generator, so a run is repeatable: after N RUN clocks
+the four sums equal the reference in `test/test.py` (`bench(N)`), which checks the silicon works.
+
+Measuring (core supply on its own, e.g. the breakout's core jumper):
+
+1. Clock running, RUN low, all inputs still: the baseline.
+2. RUN + DRY: the generator alone. 3. RUN: generator + 4 MACs per clock.
+4. Energy per MAC = (power in 3 - power in 2) / (4 x clock frequency). Repeat at several clock
+   frequencies and use the slope, which cancels leakage.
+
 ## How to test
+
+Keep `uio[4:3]` low for normal use.
 
 1. Reset (`rst_n` low): sums, pointers and weights go to 0.
 2. CLEAR, then LOAD 8 times: the 8 weight rows.
